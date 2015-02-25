@@ -37,9 +37,6 @@ Using the apt module consists predominantly of declaring classes and defined typ
 class { 'apt':
   always_apt_update    => false,
   apt_update_frequency => undef,
-  disable_keys         => undef,
-  proxy_host           => false,
-  proxy_port           => '8080',
   purge_sources_list   => false,
   purge_sources_list_d => false,
   purge_preferences_d  => false,
@@ -56,35 +53,8 @@ class { 'apt':
 
   If you declare your apt class with `purge_sources_list`, `purge_sources_list_d`, `purge_preferences` and `purge_preferences_d` set to 'true', Puppet will unapologetically purge any existing content it finds that wasn't declared with Puppet.
   
-* `apt::backports`: This class adds the necessary components to get backports for Ubuntu and Debian. The release name defaults to `$lsbdistcodename`. Setting this manually can cause undefined and potentially serious behavior.
+* `apt::params`: Sets defaults for the apt module parameters. This is a private class.
 
-  By default, this class drops a pin-file for backports, pinning it to a priority of 200. This is lower than the normal Debian archive, which gets a priority of 500 to ensure that packages with `ensure => latest` don't get magically upgraded from backports without your explicit permission.
-
-  If you raise the priority through the `pin_priority` parameter to 500---identical to the rest of the Debian mirrors---normal policy goes into effect, and Apt installs or upgrades to the newest version. This means that if a package is available from backports, it and its dependencies are pulled in from backports unless you explicitly set the `ensure` attribute of the `package` resource to `installed`/`present` or a specific version.
-
-* `apt::params`: Sets defaults for the apt module parameters.
-
-* `apt::release`: Sets the default Apt release. This class is particularly useful when using repositories that are unstable in Ubuntu, such as Debian.
-
-  ```
-  class { 'apt::release':
-    release_id => 'precise',
-  }
-  ```  
-
-* `apt::unattended_upgrades`: This class manages the unattended-upgrades package and related configuration files for Ubuntu and Debian systems. You can configure the class to automatically upgrade all new package releases or just security releases.
-
-  ```
-  class { 'apt::unattended_upgrades':
-    origins     => $::apt::params::origins,
-    blacklist   => [],
-    update      => '1',
-    download    => '1',
-    upgrade     => '1',
-    autoclean   => '7',
-  }
-  ```
-  
 * `apt::update`: Runs `apt-get update`, updating the list of available packages and their versions without installing or upgrading any packages. The update runs on the first Puppet run after you include the class, then whenever `notify  => Exec['apt_update']` occurs; i.e., whenever config files get updated or other relevant changes occur. If you set the `always_apt_update` parameter to 'true', the update runs on every Puppet run.
 
 ### Types
@@ -111,50 +81,7 @@ class { 'apt':
 
 ### Defined Types
 
-* `apt::builddep`: Installs the build dependencies of a specified package.
-
-  `apt::builddep { 'glusterfs-server': }`
-    
 * `apt::conf`: Specifies a custom configuration file. The priority defaults to 50, but you can set the priority parameter to load the file earlier or later. The content parameter passes specified content, if any, into the file resource.
-
-* `apt::hold`: Holds a specific version of a package. You can hold a package to a full version or a partial version.
-
-  To set a package's ensure attribute to 'latest' but get the version specified by `apt::hold`:
-
-  ```
-  apt::hold { 'vim':
-    version => '2:7.3.547-7',
-  }
-  ```
-
-  Alternatively, if you want to hold your package at a partial version, you can use a wildcard. For example, you can hold Vim at version 7.3.*:
-
-
-  ```
-  apt::hold { 'vim':
-    version => '2:7.3.*',
-  }
-  ```
-
-* `apt::force`: Forces a package to be installed from a specific release. This is particularly useful when using repositories that are unstable in Ubuntu, such as Debian.
-
-  ```
-  apt::force { 'glusterfs-server':
-    release     => 'unstable',
-    version     => '3.0.3',
-    cfg_files   => 'unchanged',
-    cfg_missing => true,
-    require => Apt::Source['debian_unstable'],
-  }
-  ```
-
-  Valid values for `cfg_files` are:
-    * 'new': Overwrites all existing configuration files with newer ones.
-    * 'old': Forces usage of all old files.
-    * 'unchanged: Updates only unchanged config files.
-    * 'none': Provides backward-compatibility with existing Puppet manifests.
-   
-  Valid values for `cfg_missing` are 'true', 'false'. Setting this to 'false' provides backward compatibility; setting it to 'true' checks for and installs missing configuration files for the selected package.
 
 * `apt::key`: Adds a key to the list of keys used by Apt to authenticate packages. This type uses the aforementioned `apt_key` native type. As such, it no longer requires the `wget` command on which the old implementation depended.
 
@@ -193,6 +120,8 @@ class { 'apt':
   If you want to pin a number of packages, you can specify the packages as a space-delimited string using the `packages` attribute, or you can pass in an array of package names.
 
 * `apt::ppa`: Adds a PPA repository using `add-apt-repository`. For example, `apt::ppa { 'ppa:drizzle-developers/ppa': }`.
+
+* `apt::setting`: TODO
 
 * `apt::source`: Adds an Apt source to `/etc/apt/sources.list.d/`. For example:
 
@@ -242,7 +171,6 @@ apt::sources:
     location: 'http://debian.mirror.iweb.ca/debian/'
     release: 'unstable'
     repos: 'main contrib non-free'
-    required_packages: 'debian-keyring debian-archive-keyring'
     key: '9AA38DCD55BE302B'
     key_server: 'subkeys.pgp.net'
     pin: '-10'
@@ -267,25 +195,11 @@ apt::sources:
   * 'daily': Runs update daily; that is, `apt-get update` runs if the value of `apt_update_last_success` is less than current epoch time - 86400. If the exec resource `apt_update` is notified, `apt-get update` runs regardless of this value. 
   * 'weekly': Runs update weekly; that is, `apt-get update` runs if the value of `apt_update_last_success` is less than current epoch time - 604800. If the exec resource `apt_update` is notified, `apt-get update` runs regardless of this value. 
   * 'reluctantly': Only runs `apt-get update` if the exec resource `apt_update` is notified. This is the default setting.  
-* `disable_keys`: Disables the requirement for all packages to be signed.
-* `proxy_host`: Configures a proxy host and stores the configuration in /etc/apt/apt.conf.d/01proxy.
-* `proxy_port`: Configures a proxy port and stores the configuration in /etc/apt/apt.conf.d/01proxy.
 * `purge_sources_list`: If set to 'true', Puppet purges all unmanaged entries from sources.list. Accepts 'true' or 'false'. Defaults to 'false'.
 * `purge_sources_list_d`: If set to 'true', Puppet purges all unmanaged entries from sources.list.d. Accepts 'true' or 'false'. Defaults to 'false'.
 * `update_timeout`: Overrides the exec timeout in seconds for `apt-get update`. Defaults to exec default (300).
 * `update_tries`: Sets how many times to attempt running `apt-get update`. Use this to work around transient DNS and HTTP errors. By default, the command runs only once.
 * `sources`: Passes a hash to create_resource to make new `apt::source` resources.
-* `fancy_progress`: Enables fancy progress bars for apt. Accepts 'true', 'false'. Defaults to 'false'.
-
-####apt::unattended_upgrades
-
-* `origins`: The repositories from which to automatically upgrade included packages.
-* `blacklist`: A list of packages to **not** automatically upgrade.
-* `update`: How often, in days, to run `apt-get update`.
-* `download`: How often, in days, to run `apt-get upgrade --download-only`.
-* `upgrade`: How often, in days, to upgrade packages included in the origins list.
-* `autoclean`: How often, in days, to run `apt-get autoclean`.
-* `randomsleep`: How long, in seconds, to randomly wait before applying upgrades.
 
 ####apt::source
 
